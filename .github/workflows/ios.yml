@@ -23,7 +23,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 120
     env:
-      APP_TITLE: JuegoDinos      # nombre del proyecto de Xcode / de la app (sin espacios)
+      APP_TITLE: JuegoDinos      # nombre del proyecto de Xcode (sin espacios). OJO: kivy-ios lo pasa a
+                                 # minúsculas; la app se llamará "juegodinos" en el iPhone
 
     steps:
       - uses: actions/checkout@v4

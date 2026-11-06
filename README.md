@@ -44,9 +44,9 @@ Cada vez que se sube código a la rama `main`, GitHub construye **dos archivos**
 
 > Un *artifact* es un archivo que un build deja disponible para descargar. Se conservan 90 días.
 
-> **Estado de la verificación (ver [§12](#12-bitácora-real-lo-que-falló-y-cómo-se-arregló)):**
-> los archivos se compilan en la nube y se comprobó su contenido. **No se han probado en un
-> teléfono real.**
+> **Estado de la verificación:** los dos builds terminaron en verde y se **abrieron los archivos
+> resultantes** para comprobar que dentro están `main.py`, `App_juego.kv` y las 3 imágenes (y que
+> **no** se coló `docs/`). **No se han instalado en un teléfono real**: eso queda por comprobar.
 
 ---
 
@@ -93,7 +93,7 @@ Piezas, de la más grande a la más pequeña:
 | **Workflow** | Una «receta» automática. Es **un archivo `.yml`**. | `android.yml` y `ios.yml` |
 | **Evento / disparador** (`on:`) | Lo que hace que la receta se ejecute | un `push` a `main`, o un botón manual (`workflow_dispatch`) |
 | **Job** | Un trabajo dentro de la receta. Cada job corre en **su propio ordenador** | `apk` (en `android.yml`) y `ios` (en `ios.yml`) |
-| **Runner** | El ordenador virtual **temporal** que GitHub presta para ejecutar un job. Nace vacío y **se destruye** al terminar | `ubuntu-24.04` (Linux) y `macos-14` (Mac) |
+| **Runner** | El ordenador virtual **temporal** que GitHub presta para ejecutar un job. Nace vacío y **se destruye** al terminar | `ubuntu-24.04` (Linux) y `macos-15` (Mac) |
 | **Step** (paso) | Una instrucción del job: un comando de terminal (`run:`) o una «acción» ya hecha por otros (`uses:`) | «instalar Python», «compilar APK»… |
 | **Action** | Un paso reutilizable publicado por alguien (`actions/checkout@v4`, etc.) | `checkout`, `setup-python`, `cache`, `upload-artifact` |
 | **Artifact** | Archivo que el job guarda para poder **descargarlo** después | el `.apk` y el `.ipa` |
@@ -139,7 +139,7 @@ Android e iOS son sistemas muy distintos, así que usan **herramientas distintas
 | Herramienta principal | **buildozer** | **kivy-ios** (`toolchain`) |
 | Herramienta «de fondo» | **python-for-android** (p4a): compila Python y Kivy para Android; buildozer lo maneja por ti | **Xcode** (`xcodebuild`): el compilador de Apple |
 | Se configura con | `buildozer.spec` | argumentos de `toolchain` y del workflow |
-| Dónde corre | Linux (`ubuntu-24.04`) | **solo macOS** (`macos-14`): Xcode no existe en Linux ni Windows |
+| Dónde corre | Linux (`ubuntu-24.04`) | **solo macOS** (`macos-15`): Xcode no existe en Linux ni Windows |
 | ¿Firma? | El APK de *debug* se firma solo con una clave de pruebas → **se instala directo** | Apple **exige** firma. Aquí se genera **sin firmar** y se firma al instalar |
 
 **¿Por qué «sin firmar» en iOS?** Para firmar hace falta un certificado de Apple Developer (99 USD/año).
@@ -314,6 +314,7 @@ Archivo: [`.github/workflows/android.yml`](.github/workflows/android.yml) (con c
 | 5. `actions/cache@v4` | Guarda/recupera `~/.buildozer` (SDK, NDK…) | la 1.ª vez se descargan ~2 GB; con caché, las siguientes veces se reutilizan |
 | `key: buildozer-${{ hashFiles('buildozer.spec') }}` | Identificador de la caché | `hashFiles` calcula una «huella» del archivo: si cambias `buildozer.spec`, la huella cambia y se crea caché nueva (porque podrían necesitarse otras descargas) |
 | 6. `buildozer -v android debug` | **La compilación** | `debug` = APK firmado con clave de pruebas (instalable directo) |
+| Bucle `for intento in 1 2 3` alrededor | Reintenta si falla | buildozer descarga cosas de Internet y a veces **una descarga se corta** (`Connection reset by peer`). Es un fallo de red, no del código; reintentar lo resuelve. Si fallan los 3 intentos, el paso falla de verdad |
 | 7. `actions/upload-artifact@v4` | Sube `bin/*.apk` | el runner se destruye; sin esto el APK se perdería |
 | `if-no-files-found: error` | Falla si no hay APK | así un «verde» siempre significa que **hay** archivo |
 
@@ -325,7 +326,7 @@ Archivo: [`.github/workflows/ios.yml`](.github/workflows/ios.yml). Lo que difier
 
 | Parte | Qué hace | Por qué |
 |---|---|---|
-| `runs-on: macos-14` | Runner Mac | **Xcode solo existe en macOS** |
+| `runs-on: macos-15` | Runner Mac | **Xcode solo existe en macOS**. Se usa `macos-15` y no `macos-14` porque, en esta cuenta, GitHub rechaza `macos-14` al instante (ver [§12](#12-bitácora-real-lo-que-falló-y-cómo-se-arregló)) |
 | `brew install autoconf automake libtool pkg-config` | Herramientas de compilación | **Homebrew** es el gestor de paquetes de Mac (equivale a `apt-get`). Las pide kivy-ios |
 | `pip install kivy-ios "cython==3.0.11"` | Instala kivy-ios y Cython | Cython es **obligatorio** (sin él: `Missing requirement: cython is not installed`); 3.0.11 es la última versión que Kivy 2.3.1 admite |
 | `toolchain build python3 kivy` | Compila Python y Kivy para iOS | **es lo más lento** (~20 min) y por eso se cachea |
@@ -360,7 +361,15 @@ Descarga el `.zip` y descomprímelo para obtener el `.apk` / `.ipa`.
 
 **Tiempos reales de este repositorio** (la 1.ª ejecución, sin caché):
 
-> TIEMPOS_PENDIENTES
+Medidos en las ejecuciones que terminaron en verde (la 1.ª de cada una **sin caché**):
+
+| Build | Total | Dónde se va el tiempo |
+|---|---|---|
+| **Android** | **11 min 26 s** | `Compilar APK`: 10 min 22 s (descargar SDK/NDK y compilar Python + Kivy); instalar dependencias del sistema: 24 s |
+| **iOS** | **28 min 26 s** | 5 min **esperando** a que GitHub asigne un Mac libre; `Compilar Python y Kivy para iOS`: 21 min 45 s; guardar caché: 41 s; `xcodebuild` + empaquetar: **solo 20 s** |
+
+Las dos ejecuciones guardaron su caché, así que las siguientes deberían ser **mucho más rápidas** (sobre todo
+iOS, donde 22 de los 28 minutos son la parte cacheada). Esa mejora **no se ha medido** todavía.S
 
 ---
 
@@ -390,7 +399,7 @@ El `.ipa` no está firmado, así que se firma con tu Apple ID **al instalarlo**.
    tienes verificación en dos pasos, el código que llega al iPhone).
 3. En el iPhone: *Ajustes → General → VPN y gestión de dispositivos* → tu Apple ID → **Confiar**.
 4. iOS 16 o superior: *Ajustes → Privacidad y seguridad → Modo de desarrollador* → activar y reiniciar.
-5. Abre la app **JuegoDinos**.
+5. Abre la app **juegodinos** (así se llama en el iPhone: kivy-ios pone el nombre en minúsculas; su identificador es `org.kivy.juegodinos`).
 
 **Límites del Apple ID gratuito:** la app **caduca a los 7 días** (hay que reinstalarla); hay un tope de apps
 instaladas a la vez (unas 3 por dispositivo) y de dispositivos/apps nuevas por semana. Con el **mismo Apple ID**
@@ -401,7 +410,41 @@ instalación caduca por su cuenta. (Las cifras exactas las decide Apple y pueden
 
 ## 12. Bitácora real: lo que falló y cómo se arregló
 
-> BITACORA_PENDIENTE
+Lo que sigue **ocurrió de verdad** al construir este repositorio, en este orden. Es la mejor forma de
+aprender a usar Actions: casi nunca sale a la primera, y lo que importa es **saber leer el error**.
+
+| # | Qué pasó | Cómo se vio | Causa real | Arreglo |
+|---|---|---|---|---|
+| 1 | El build de **iOS** se cancelaba a los pocos segundos (2 intentos) | Anotación roja: `The configuration 'macos-14-arm64-us-default' is not supported`; el job tenía **0 pasos** ejecutados | GitHub **no asigna** el runner `macos-14` a esta cuenta. En otra cuenta (una organización) ese mismo runner sí funcionó, así que **no es un fallo del workflow**. La causa exacta en GitHub no se pudo determinar | Se lanzó un workflow de diagnóstico con varias etiquetas: `macos-15`, `macos-26` y `macos-latest` **sí** arrancaron; `macos-14` no. Se cambió `ios.yml` a **`macos-15`** y se borró el diagnóstico |
+| 2 | El build de **Android** falló a los ~2 min | En el log: `Accept? (y/N): Skipping following packages as the license is not accepted` y después `Aidl not found, please install it` | Faltaba `android.accept_sdk_license = True` en `buildozer.spec`. Sin ella, buildozer **pregunta** si aceptas la licencia de Google; en la nube no hay nadie para contestar, el SDK no se instala y falla más adelante con un mensaje que no menciona la licencia. Fue un **olvido** al escribir el archivo | Se añadió la línea (ver [§7](#7-buildozerspec-línea-por-línea)) |
+| 3 | El build de **Android** volvió a fallar a los ~2,5 min | `URLError: <urlopen error [Errno 104] Connection reset by peer>` al descargar Apache Ant | **Fallo de red** pasajero: se cortó una descarga. No es un error del proyecto | Se envolvió la compilación en un bucle de **3 reintentos** (ver [§8](#8-androidyml-explicado)) |
+
+> **Por qué importa el nº 2:** el mensaje final del error («Aidl not found») **no** decía «licencia». La causa
+> estaba **más arriba en el log**. Regla de oro: **cuando algo falla, no te quedes con la última línea roja;
+> sube hasta encontrar el primer error.**
+
+### Problemas de un proyecto anterior, ya prevenidos aquí
+
+Estos errores se descubrieron antes, construyendo una app mayor (Kivy Arcade), y por eso el código de este
+repositorio ya los evita. **No se produjeron aquí**, pero conviene conocerlos porque son los que probablemente
+encuentres con tu propia app:
+
+| Síntoma | Causa | Dónde está la defensa |
+|---|---|---|
+| Android: `possibly undefined macro: LT_SYS_SYMBOL_USCORE` (falla `libffi`) | Faltan los paquetes del sistema `libltdl-dev` y `libtool-bin` | `android.yml`, paso «Dependencias del sistema» |
+| Android: compila Python 3.14 y Kivy no compila | Sin fijar versión, python-for-android usa la última, que empaqueta Python 3.14 | `buildozer.spec`: `p4a.branch = v2024.01.21` (+ `android.api`/`ndk`) |
+| iOS: `Missing requirement: cython is not installed` | kivy-ios necesita Cython y no se instala solo | `ios.yml`: `pip install … "cython==3.0.11"` |
+| iOS: `symbol(s) not found for architecture x86_64` | Las librerías de kivy-ios para el **simulador** son solo `arm64` | `ios.yml` **no compila para el simulador** (solo para iPhone), así que el problema no existe aquí |
+| iOS: si un paso tardío falla, se pierden 20 min de compilación | La caché normal se guarda **al final del job y solo si todo va bien** | `ios.yml`: caché dividida en `restore` + `save` justo tras la parte lenta |
+
+### Cómo leer un error en Actions (guía rápida)
+
+1. Pestaña **Actions** → entra a la ejecución con ❌ → clic en el job de la izquierda.
+2. Los pasos aparecen en orden; el que falló tiene ❌ y se abre solo. Si no, ábrelo.
+3. **Mira también las «Annotations»** (resumen de la ejecución): a veces el motivo real está ahí, como en el nº 1.
+4. En el log, **busca hacia arriba** la primera línea con `error`, `ERROR`, `failed` o `not found`.
+5. Copia esa línea (no la última) a un buscador, o pásasela a quien te ayude.
+6. Corrige, haz `git push`, y vuelve a mirar. Si fue un fallo de red, usa **Re-run failed jobs**.
 
 ---
 
