@@ -59,8 +59,16 @@ jobs:                            # un workflow tiene uno o más "jobs" (trabajos
 
       # 6) La compilación en sí: buildozer descarga Android SDK/NDK, compila Python y Kivy
       #    para Android y empaqueta todo en un APK dentro de la carpeta bin/.
+      #    Se reintenta hasta 3 veces: buildozer descarga cosas de Internet (SDK, NDK, Ant...) y,
+      #    de vez en cuando, una descarga se corta ("Connection reset by peer"). Es un fallo
+      #    de red, no del código, y reintentar lo resuelve. Si falla 3 veces, el paso falla.
       - name: Compilar APK (debug)
-        run: buildozer -v android debug
+        run: |
+          for intento in 1 2 3; do
+            buildozer -v android debug && exit 0
+            echo "::warning::Intento $intento de 3 fallido; reintentando..."
+          done
+          exit 1
 
       # 7) Subir el APK como "artifact" (archivo descargable desde la página de la ejecución).
       #    Sin este paso, el APK se perdería al terminar: el runner se destruye.

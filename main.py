@@ -31,8 +31,9 @@ class Pantalla3(Screen):
 class WindowManager(ScreenManager):
     pass
 
-# CAMBIO 2: antes era Builder.load_file("App_juego.kv"), una ruta relativa que solo funciona
-# si el programa se lanza desde la misma carpeta. Ahora la ruta es absoluta (BASE + nombre).
+# CAMBIO 2: antes era Builder.load_file("App_juego.kv"), una ruta relativa. En el PC también
+# funcionaba (Kivy busca junto al script), pero así no dependemos de ello: en el teléfono la
+# carpeta de trabajo no es la nuestra. Ahora la ruta es absoluta (BASE + nombre del archivo).
 kv = Builder.load_file(os.path.join(BASE, "App_juego.kv"))
 
 class AppJuego(App):
