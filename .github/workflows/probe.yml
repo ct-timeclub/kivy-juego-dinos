@@ -1,0 +1,11 @@
+name: probe-macos
+on: workflow_dispatch
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-13, macos-14, macos-15, macos-latest, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: uname -m && sw_vers && xcodebuild -version
