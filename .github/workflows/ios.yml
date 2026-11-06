@@ -16,7 +16,11 @@ on:
 
 jobs:
   ios:
-    runs-on: macos-14            # Mac virtual (Apple Silicon) con Xcode ya instalado
+    # Mac virtual (Apple Silicon) con Xcode ya instalado. Se usa macos-15 y NO macos-14 porque, en
+    # esta cuenta, GitHub rechaza macos-14 al instante ("The configuration 'macos-14-arm64-us-default'
+    # is not supported"). Se comprobó con un workflow de diagnóstico: macos-15, macos-26 y
+    # macos-latest sí arrancan.
+    runs-on: macos-15
     timeout-minutes: 120
     env:
       APP_TITLE: JuegoDinos      # nombre del proyecto de Xcode / de la app (sin espacios)
