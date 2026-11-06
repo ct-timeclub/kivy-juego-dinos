@@ -1,0 +1,72 @@
+# ============================================================================================
+#  WORKFLOW: compilar el APK de Android
+#  Un "workflow" es una receta escrita en YAML que GitHub ejecuta en un ordenador de su nube.
+#  Este archivo DEBE estar en .github/workflows/ para que GitHub lo encuentre.
+#  Explicación completa, línea por línea, en el README.md del repositorio.
+# ============================================================================================
+name: Build Android (APK)        # nombre que se ve en la pestaña "Actions"
+
+# CUÁNDO se ejecuta (los "disparadores"):
+on:
+  push:                          # cada vez que se sube código (git push)...
+    branches: [main]             # ...a la rama main
+    paths-ignore:                # ...salvo que lo único que cambió sea documentación
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:             # y también a mano: Actions -> este workflow -> "Run workflow"
+
+jobs:                            # un workflow tiene uno o más "jobs" (trabajos)
+  apk:                           # nombre de nuestro único job
+    runs-on: ubuntu-24.04        # el ordenador virtual (runner): Linux Ubuntu 24.04, gratis
+    timeout-minutes: 90          # si tarda más de 90 min, se cancela (evita colgarse para siempre)
+
+    steps:                       # los pasos se ejecutan en orden; si uno falla, se detiene todo
+
+      # 1) Descargar el código del repositorio al runner (empieza vacío).
+      - uses: actions/checkout@v4
+
+      # 2) Instalar Python en el runner. Es el Python que EJECUTA buildozer; no tiene nada que
+      #    ver con el Python que se empaqueta dentro de la app (ese lo decide buildozer.spec).
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3) Programas del sistema que necesita la compilación (Java, herramientas de compilación...).
+      #    libltdl-dev y libtool-bin se añadieron porque sin ellos falla la receta de libffi
+      #    ("possibly undefined macro: LT_SYS_SYMBOL_USCORE").
+      - name: Dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip \
+            autoconf libtool libtool-bin libltdl-dev pkg-config zlib1g-dev \
+            libncurses5-dev libncursesw5-dev libtinfo6 cmake libffi-dev libssl-dev \
+            automake autopoint gettext
+
+      # 4) Instalar buildozer. Cython 0.29.34 porque las recetas de esa versión de p4a
+      #    no funcionan con Cython 3.
+      - name: Instalar buildozer
+        run: python -m pip install buildozer setuptools cython==0.29.34
+
+      # 5) Caché: guarda lo que se descargó (SDK y NDK de Android, ~2 GB) para no repetirlo
+      #    en la siguiente ejecución. La "key" cambia si cambia buildozer.spec -> caché nueva.
+      - name: Caché de buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+
+      # 6) La compilación en sí: buildozer descarga Android SDK/NDK, compila Python y Kivy
+      #    para Android y empaqueta todo en un APK dentro de la carpeta bin/.
+      - name: Compilar APK (debug)
+        run: buildozer -v android debug
+
+      # 7) Subir el APK como "artifact" (archivo descargable desde la página de la ejecución).
+      #    Sin este paso, el APK se perdería al terminar: el runner se destruye.
+      - name: Subir el APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: juego-apk
+          path: bin/*.apk
+          if-no-files-found: error   # si no hay APK, marcar el job como fallido

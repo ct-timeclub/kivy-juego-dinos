@@ -1,0 +1,4 @@
+# Solo para ejecutar la app en el PC (python main.py).
+# NO lo usan los builds de Android/iOS: allí las dependencias se declaran en
+# buildozer.spec (línea "requirements") y en .github/workflows/ios.yml.
+kivy==2.3.1

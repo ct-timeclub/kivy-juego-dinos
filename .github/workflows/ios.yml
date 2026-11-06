@@ -1,0 +1,105 @@
+# ============================================================================================
+#  WORKFLOW: compilar el IPA de iOS (sin firmar)
+#  iOS solo se puede compilar con las herramientas de Apple (Xcode), que solo existen en
+#  macOS. Por eso este workflow usa un runner Mac ("macos-14"), no Linux.
+#  Explicación completa, línea por línea, en el README.md del repositorio.
+# ============================================================================================
+name: Build iOS (IPA sin firmar)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-14            # Mac virtual (Apple Silicon) con Xcode ya instalado
+    timeout-minutes: 120
+    env:
+      APP_TITLE: JuegoDinos      # nombre del proyecto de Xcode / de la app (sin espacios)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Herramientas de compilación que pide kivy-ios (en Mac se instalan con Homebrew).
+      - name: Herramientas de compilación
+        run: |
+          brew install autoconf automake libtool pkg-config
+          brew link libtool || true
+
+      # kivy-ios = programa que compila Python y Kivy para iOS (equivale a buildozer en Android).
+      # Cython es OBLIGATORIO: sin él falla con "Missing requirement: cython is not installed".
+      # 3.0.11 es la última versión que Kivy 2.3.1 soporta.
+      - name: Instalar kivy-ios
+        run: python -m pip install kivy-ios "cython==3.0.11" setuptools
+
+      # kivy-ios trabaja dentro de la carpeta en la que se ejecuta (crea build/ y dist/).
+      - run: mkdir -p ios-toolchain
+
+      # Caché de la parte lenta (compilar Python y Kivy, ~20 min). "restore" = recupera si existe.
+      - name: Restaurar caché de la toolchain
+        id: toolchain-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ios-toolchain/build
+            ios-toolchain/dist
+          key: kivy-ios-${{ runner.os }}-${{ runner.arch }}-v1
+
+      - name: Compilar Python y Kivy para iOS
+        working-directory: ios-toolchain
+        run: toolchain build python3 kivy
+
+      # La caché se guarda JUSTO AQUÍ (y no al final) para que, si un paso posterior falla,
+      # el siguiente intento no tenga que repetir los 20 minutos.
+      - name: Guardar caché de la toolchain
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ios-toolchain/build
+            ios-toolchain/dist
+          key: kivy-ios-${{ runner.os }}-${{ runner.arch }}-v1
+
+      # Copiar SOLO lo que es de la app (main.py, .kv, imágenes) a la carpeta que lee kivy-ios.
+      - name: Preparar carpeta de la app
+        run: |
+          mkdir -p ios-toolchain/app
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'ios-toolchain' \
+            --exclude '.buildozer' --exclude 'bin' --exclude 'docs' \
+            --exclude 'buildozer.spec' ./ ios-toolchain/app/
+
+      # Genera un proyecto de Xcode que envuelve nuestra app.
+      - name: Crear el proyecto de Xcode
+        working-directory: ios-toolchain
+        run: toolchain create "$APP_TITLE" "$PWD/app"
+
+      # xcodebuild = compilador de Apple. CODE_SIGNING_ALLOWED=NO: no hay certificados de Apple,
+      # así que se compila SIN firmar (la firma se pone después, al instalar: ver README).
+      # Un .ipa es simplemente un .zip con una carpeta "Payload" que contiene la .app.
+      - name: Compilar para iPhone (sin firmar) y empaquetar el .ipa
+        working-directory: ios-toolchain
+        run: |
+          PROJ=$(find . -maxdepth 2 -name '*.xcodeproj' | head -1)
+          SCHEME=$(basename "$PROJ" .xcodeproj)
+          xcodebuild -project "$PROJ" -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -derivedDataPath build/xcode-device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+          APP=$(find build/xcode-device/Build/Products -maxdepth 2 -name '*.app' | head -1)
+          mkdir -p out/Payload
+          cp -R "$APP" out/Payload/
+          (cd out && zip -qr Juego-Dinos-unsigned.ipa Payload)
+
+      - name: Subir el IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: juego-ios
+          path: ios-toolchain/out/Juego-Dinos-unsigned.ipa
+          if-no-files-found: error

@@ -1,0 +1,125 @@
+WindowManager:
+    Pantalla1:
+    Pantalla2:
+    Pantalla3
+
+
+<BackgroundColorLabel@Label>:
+    background_color: 0, 0, 0, 0
+    size_hint: None, 0.5
+    #size: self.texture_size
+    width: self.texture_size[0]
+
+    canvas.before:
+        Color:
+            rgb: self.background_color
+        Rectangle:
+            size: self.size
+            pos: self.pos
+
+<Pantalla1>:
+    name: "main"
+
+    canvas.before:
+        Rectangle:
+            pos: self.pos
+            size: self.size
+            source: 'App_dino4.jpg'  # Path to your image
+
+    GridLayout:
+        cols: 1
+
+        Label: 
+            markup: True
+            text: "Esta es nuestra primera pantalla"
+            font_size : 20
+            color: "#2b072b"
+
+        AnchorLayout:
+            anchor_x: 'center'
+            anchor_y: 'center'
+    
+            Button:
+                id: btn_inicio
+                text: "Inicia el juego"
+                font_size: "18"
+                size: (150,100)
+                size_hint: None, 0.25
+                color: "#00d5ff"
+                on_release:
+                    app.root.current = "pantalla2"
+                    root.manager.transition.direction = "right"
+
+
+<Pantalla2>:
+    name: "pantalla2"
+
+    canvas.before:
+        Rectangle:
+            pos: self.pos
+            size: self.size
+            source: 'App_dino3.jpg' 
+
+    GridLayout:
+        cols: 1
+
+        Label: 
+            markup: True
+            text: "Esta es la segunda pantalla"
+            font_size : 18
+            color: "#785ab9"
+        
+        AnchorLayout:
+            anchor_x: 'center'
+            anchor_y: 'center'
+
+            BackgroundColorLabel:
+                text: "Etiqueta personalizada con texto muuuuy largo"
+                color: "#2b072b"
+                background_color: 210/255, 169/255, 222/255
+
+        AnchorLayout:
+            anchor_x: 'center'
+            anchor_y: 'center'
+
+            Button:
+                id: btn_move2
+                text: "Siguiente pantalla"
+                font_size: "18"
+                size_hint : 0.25, 0.25
+                color: "#55d32f"
+                on_release:
+                    app.root.current = "pantalla3"
+                    root.manager.transition.direction = "left"
+
+<Pantalla3>:
+    name: "pantalla3"
+
+    canvas.before:
+        Rectangle:
+            pos: self.pos
+            size: self.size
+            source: 'App_dino1.jpg' 
+
+    GridLayout:
+        cols: 1
+
+        Label: 
+            markup: True
+            text: "Esta es la tercera pantalla"
+            font_size : 18
+            color: "#785ab9"
+
+        AnchorLayout:
+            anchor_x: 'center'
+            anchor_y: 'center'
+
+            Button:
+                id: btn_move_inicio
+                text: "Regresar a inicio"
+                font_size: "18"
+                size_hint : 0.25, 0.25
+                color: "#55d32f"
+                on_release:
+                    app.root.current = "main"
+                    root.manager.transition.direction = "up"
