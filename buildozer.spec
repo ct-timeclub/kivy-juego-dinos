@@ -36,6 +36,10 @@ android.archs = arm64-v8a, x86_64
 # API 33 = Android 13. Es la combinación probada con la versión de python-for-android de abajo.
 android.api = 33
 android.ndk = 25b
+# Google obliga a aceptar la licencia del Android SDK antes de descargarlo. Normalmente el
+# programa pregunta "Accept? (y/N)"; en GitHub Actions no hay nadie para contestar, y sin esta
+# línea el SDK NO se instala y el build falla con "Aidl not found" / "license not accepted".
+android.accept_sdk_license = True
 
 # --- python-for-android (p4a) ------------------------------------------------------------
 # Es el programa que realmente empaqueta Python y Kivy dentro del APK. Se FIJA a una versión
